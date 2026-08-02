@@ -21,4 +21,9 @@ vst3 = "0.3.0"
 
 [profile.release]
 opt-level = 2
-lto = "thin"
+lto = "fat"
+codegen-units = 1
+# A panic must not unwind across the FFI boundary into the host, so there is
+# nothing for the unwinding tables to do.
+panic = "abort"
+strip = true

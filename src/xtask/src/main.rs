@@ -172,11 +172,62 @@ fn bundle(args: &[String]) -> Result<PathBuf, String> {
     let dist = write_dist(&root, &lib, &bundle_root, &triple)?;
     println!("dist:   {}", dist.display());
 
-    // 5. The build succeeded and dist/ has the result, so the intermediates are
+    // 5. Load what is about to ship, the way a host will.
+    if runnable_here(&triple) {
+        verify_bundle(&dist)?;
+    } else {
+        println!("note:   built for {triple}, which cannot be loaded here");
+    }
+
+    // 6. The build succeeded and dist/ has the result, so the intermediates are
     //    only of interest when something went wrong.
     remove_target(&root);
 
     Ok(bundle_root)
+}
+
+/// Whether a bundle built for `triple` can be loaded by this process.
+fn runnable_here(triple: &str) -> bool {
+    let os = if is_macos(triple) {
+        cfg!(target_os = "macos")
+    } else if triple.contains("windows") {
+        cfg!(target_os = "windows")
+    } else if triple.contains("linux") {
+        cfg!(target_os = "linux")
+    } else {
+        false
+    };
+    let arch = if triple.starts_with("aarch64") {
+        cfg!(target_arch = "aarch64")
+    } else if triple.starts_with("x86_64") {
+        cfg!(target_arch = "x86_64")
+    } else {
+        false
+    };
+    os && arch
+}
+
+/// Load the finished bundle and ask it for its classes.
+///
+/// A plug-in's entry points are looked up by name at load time, so anything
+/// that removes or renames them — stripping, the wrong crate type, a missing
+/// `#[no_mangle]` — compiles and links cleanly and then fails in the host. The
+/// only way to know is to load it.
+fn verify_bundle(bundle: &Path) -> Result<(), String> {
+    let module = notepad_host::Module::load(bundle)
+        .map_err(|e| format!("{} does not load: {e}", bundle.display()))?;
+
+    let count = module.class_count();
+    if count == 0 {
+        return Err(format!("{}: the factory reports no classes", bundle.display()));
+    }
+    for index in 0..count {
+        let Some((name, category)) = module.class_info(index) else {
+            return Err(format!("{}: class {index} has no readable info", bundle.display()));
+        };
+        println!("loads:  {name} ({category})");
+    }
+    Ok(())
 }
 
 /// Delete `dist/`.

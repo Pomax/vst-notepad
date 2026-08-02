@@ -160,7 +160,9 @@ the pixel tests, on both `windows-latest` and `macos-14`, plus a
 `.github/workflows/build.yml` runs on pushes to `main` that change the code.
 Markdown, `docs/`, `.github/`, `LICENSE` and `.gitignore` are ignored, so
 editing the workflows does not cut a release. It builds and zips both
-platforms, then publishes them as a GitHub release. Releases are numbered by how
+platforms, then publishes them as a GitHub release. Before publishing, each job
+loads the bundle it just built and asks the factory for its classes, so a build
+that produces something no host can open fails there rather than in a DAW. Releases are numbered by how
 many already exist — the first is `1`, the one after release `8` is `9`. There
 is no version number and no semver; this is a product, not a library.
 

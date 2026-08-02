@@ -1035,7 +1035,6 @@ dependencies = [
  "open",
  "raw-window-handle",
  "thiserror 2.0.19",
- "tracing",
 ]
 
 [[package]]

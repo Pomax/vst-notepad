@@ -16,7 +16,7 @@ vst3.workspace = true
 serde_json = "1"
 # Native Open/Save dialogs, so file operations look like the host's own.
 rfd = "0.15"
-egui-baseview = "0.6.0"
+egui-baseview = { version = "0.6.0", default-features = false, features = ["opengl"] }
 # default-features off drops the embedded font set (~1.4 MB); the fonts come
 # from the operating system instead, see gui::install_system_fonts.
 egui = { version = "0.35", default-features = false }
