@@ -1,11 +1,11 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/notepad-core",
-    "crates/notepad-plugin",
-    "crates/notepad-host",
-    "crates/notepad-testrunner",
-    "xtask",
+    "src/crates/notepad-core",
+    "src/crates/notepad-plugin",
+    "src/crates/notepad-host",
+    "src/crates/notepad-testrunner",
+    "src/xtask",
 ]
 
 [workspace.package]
@@ -15,8 +15,8 @@ license = "MIT OR Apache-2.0"
 authors = ["vst-notepad"]
 
 [workspace.dependencies]
-notepad-core = { path = "crates/notepad-core" }
-notepad-host = { path = "crates/notepad-host" }
+notepad-core = { path = "src/crates/notepad-core" }
+notepad-host = { path = "src/crates/notepad-host" }
 vst3 = "0.3.0"
 
 [profile.release]

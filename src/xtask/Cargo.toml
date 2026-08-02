@@ -1,0 +1,13 @@
+[package]
+name = "xtask"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Build tasks: assembling the VST3 bundle for Windows and macOS"
+publish = false
+
+[dependencies]
+# Used to read the freshly built plugin's own factory metadata when generating
+# moduleinfo.json, so the file can never drift from the binary it describes.
+notepad-host.workspace = true

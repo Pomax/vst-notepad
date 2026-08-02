@@ -1,21 +1,14 @@
-# Build output. Also where the assembled .vst3 bundle and any rendered
-# snapshots land, none of which belong in a repository.
-/target/
+.claude
+.idea
+.vscode
 
-# Local cargo config and lock noise for a workspace of binaries+libs.
-# Cargo.lock IS checked in on purpose: this workspace produces binaries, and a
-# reproducible dependency set is worth having.
-**/*.rs.bk
-*.pdb
-
-# Editors and OS droppings
-.vscode/
-.idea/
-*.swp
-*~
 .DS_Store
-Thumbs.db
 desktop.ini
+Thumbs.db
 
-# Everything Claude Code related lives in .claude/ and stays out of the repo.
-/.claude/
+target
+
+*.pdb
+*.swp
+**/*.rs.bk
+*~
