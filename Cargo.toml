@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/notepad-core",
+    "crates/notepad-plugin",
+    "crates/notepad-host",
+    "crates/notepad-testrunner",
+    "xtask",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["vst-notepad"]
+
+[workspace.dependencies]
+notepad-core = { path = "crates/notepad-core" }
+notepad-host = { path = "crates/notepad-host" }
+vst3 = "0.3.0"
+
+[profile.release]
+opt-level = 2
+lto = "thin"

@@ -1,0 +1,15 @@
+[package]
+name = "notepad-testrunner"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Loads the VST3 plugin in a host and runs scripted editing scenarios against it"
+
+[[bin]]
+name = "notepad-testrunner"
+path = "src/main.rs"
+
+[dependencies]
+notepad-core.workspace = true
+notepad-host.workspace = true

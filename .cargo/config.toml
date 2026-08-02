@@ -1,0 +1,8 @@
+# `cargo dist` builds the plugin and drops the single installable binary in
+# dist/. Plain `cargo build` cannot do this — cargo has no post-build hook that
+# can see the finished cdylib — so the build task is an xtask.
+# xtask itself is built in release for `cargo dist` so that it is not running
+# out of target/debug at the moment it tries to delete target/debug.
+[alias]
+dist = ["run", "--release", "--quiet", "-p", "xtask", "--", "bundle", "--release"]
+dist-debug = ["run", "--quiet", "-p", "xtask", "--", "bundle"]

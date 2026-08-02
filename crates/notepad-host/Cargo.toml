@@ -1,0 +1,12 @@
+[package]
+name = "notepad-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "A minimal VST3 host, used to load and drive the notepad plugin in tests"
+
+[dependencies]
+notepad-core.workspace = true
+vst3.workspace = true
+libloading = "0.8"

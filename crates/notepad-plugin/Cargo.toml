@@ -1,0 +1,46 @@
+[package]
+name = "notepad-plugin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "VST3 markdown notepad plugin"
+
+[lib]
+name = "notepad_plugin"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+notepad-core.workspace = true
+vst3.workspace = true
+serde_json = "1"
+# Native Open/Save dialogs, so file operations look like the host's own.
+rfd = "0.15"
+egui-baseview = "0.6.0"
+egui = "0.35"
+baseview = "0.2.2"
+raw-window-handle = "0.6"
+dark-light = "2.0.0"
+
+# Headless pixel rendering. Optional because it drags in the whole wgpu/naga
+# stack — gigabytes of build output for a plugin that ships as 5 MB — and
+# nothing but the snapshot tooling needs it.
+egui_kittest = { version = "0.35.0", features = ["wgpu"], optional = true }
+image = { version = "0.25.10", optional = true }
+
+[features]
+# Enables the headless renderer:
+#   cargo test -p notepad-plugin --features snapshots
+#   cargo run  -p notepad-plugin --features snapshots --example snapshot
+snapshots = ["dep:egui_kittest", "dep:image"]
+
+[[test]]
+name = "theme_rendering"
+required-features = ["snapshots"]
+
+[[example]]
+name = "snapshot"
+required-features = ["snapshots"]
+
+[[example]]
+name = "preview"
