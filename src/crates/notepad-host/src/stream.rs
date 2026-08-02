@@ -113,11 +113,23 @@ impl IBStreamTrait for MemoryStream {
             return kInternalError;
         };
         let len = inner.data.len() as i64;
-        let base = match mode {
-            IBStream_::IStreamSeekMode_::kIBSeekSet => 0,
-            IBStream_::IStreamSeekMode_::kIBSeekCur => inner.pos as i64,
-            IBStream_::IStreamSeekMode_::kIBSeekEnd => len,
-            _ => return kInvalidArgument,
+
+        // The generated seek-mode constants are `i32` on some platforms and
+        // `u32` on others, so both sides are widened before comparing rather
+        // than matched directly.
+        let mode = mode as i64;
+        let seek_set = IBStream_::IStreamSeekMode_::kIBSeekSet as i64;
+        let seek_cur = IBStream_::IStreamSeekMode_::kIBSeekCur as i64;
+        let seek_end = IBStream_::IStreamSeekMode_::kIBSeekEnd as i64;
+
+        let base = if mode == seek_set {
+            0
+        } else if mode == seek_cur {
+            inner.pos as i64
+        } else if mode == seek_end {
+            len
+        } else {
+            return kInvalidArgument;
         };
         let target = (base + pos).clamp(0, len);
         inner.pos = target as usize;
