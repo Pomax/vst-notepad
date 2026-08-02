@@ -48,7 +48,14 @@ fn main() {
         .map(|a| Theme::from_str(&a))
         .unwrap_or(Theme::Auto);
 
-    let editor = Arc::new(Mutex::new(Editor::with_text(SAMPLE)));
+    // Optional markdown file, for showing something other than the sample.
+    let text = match std::env::args().nth(2) {
+        Some(path) => std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("reading {path}: {e}")),
+        None => SAMPLE.to_string(),
+    };
+
+    let editor = Arc::new(Mutex::new(Editor::with_text(&text)));
     if let Ok(mut e) = editor.lock() {
         e.theme = theme;
         e.set_caret(0);

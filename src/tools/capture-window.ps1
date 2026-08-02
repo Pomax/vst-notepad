@@ -10,13 +10,14 @@ launches the real preview window, waits for it to appear, captures its pixels
 off the screen with BitBlt, and closes it.
 
 .EXAMPLE
-powershell -File tools/capture-window.ps1 -Theme light -Out target/window-light.png
+powershell -ExecutionPolicy Bypass -File src/tools/capture-window.ps1 -Theme light -Out target/window-light.png
 #>
 param(
     [ValidateSet('light', 'dark', 'auto')]
     [string]$Theme = 'auto',
     [string]$Out = 'target/window.png',
     [string]$Exe = 'target/debug/examples/preview.exe',
+    [string]$Notes = '',
     [int]$SettleMs = 2500
 )
 
@@ -37,6 +38,22 @@ public class Win32Capture {
     // ClientToScreen was tried first and returned a bogus size here.
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+
+    // A window's outer rect includes the invisible resize border the compositor
+    // owns, so a grab of it picks up a strip of whatever is behind. This is the
+    // rect that is actually painted.
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmGetWindowAttribute(IntPtr hWnd, int attr, out RECT value, int size);
+    const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+
+    /// Painted bounds, falling back to the outer rect where DWM has no answer.
+    public static RECT VisibleRect(IntPtr hWnd) {
+        RECT r;
+        int hr = DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, out r, Marshal.SizeOf(typeof(RECT)));
+        if (hr == 0 && r.Right > r.Left && r.Bottom > r.Top) return r;
+        GetWindowRect(hWnd, out r);
+        return r;
+    }
 
     public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
     [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr lParam);
@@ -87,7 +104,9 @@ if ($outDir -and -not (Test-Path $outDir)) {
     New-Item -ItemType Directory -Force $outDir | Out-Null
 }
 
-$proc = Start-Process -FilePath $Exe -ArgumentList $Theme -PassThru
+$launchArgs = @($Theme)
+if ($Notes) { $launchArgs += $Notes }
+$proc = Start-Process -FilePath $Exe -ArgumentList $launchArgs -PassThru
 
 try {
     # Wait for the editor window to exist.
@@ -109,8 +128,7 @@ try {
     # Let the GL context draw a few frames before grabbing pixels.
     Start-Sleep -Milliseconds $SettleMs
 
-    $rect = New-Object Win32Capture+RECT
-    [Win32Capture]::GetWindowRect($hwnd, [ref]$rect) | Out-Null
+    $rect = [Win32Capture]::VisibleRect($hwnd)
     $width = $rect.Right - $rect.Left
     $height = $rect.Bottom - $rect.Top
     if ($width -le 0 -or $height -le 0) { throw "bad window rect ${width}x${height}" }

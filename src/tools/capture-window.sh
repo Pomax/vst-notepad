@@ -3,6 +3,7 @@
 # Screenshot the real editor window on macOS.
 #
 # Usage: capture-window.sh [--theme light|dark|auto] [--out FILE] [--exe PATH]
+#                          [--notes FILE.md]
 #
 # Requires Screen Recording permission (screencapture) and Accessibility
 # permission (System Events) for whichever terminal runs it.
@@ -12,6 +13,7 @@ set -euo pipefail
 theme=auto
 out=target/window.png
 exe=target/debug/examples/preview
+notes=
 settle=2.5
 
 while [ $# -gt 0 ]; do
@@ -19,6 +21,7 @@ while [ $# -gt 0 ]; do
         --theme) theme=$2; shift 2 ;;
         --out)   out=$2;   shift 2 ;;
         --exe)   exe=$2;   shift 2 ;;
+        --notes) notes=$2; shift 2 ;;
         --settle) settle=$2; shift 2 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
@@ -31,7 +34,11 @@ fi
 
 mkdir -p "$(dirname "$out")"
 
-"$exe" "$theme" &
+if [ -n "$notes" ]; then
+    "$exe" "$theme" "$notes" &
+else
+    "$exe" "$theme" &
+fi
 pid=$!
 trap 'kill "$pid" 2>/dev/null || true' EXIT
 
