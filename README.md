@@ -20,6 +20,8 @@ True. They also don't support markdown, and let's be real. Notes in plain text? 
 
 Hell let's just Star Trek that: "Computer, make me a VST3 note-taking effect plugin that supports markdown".
 
+Oh look: it did the thing.
+
 # Installing the plugin
 
 ## Downloads are [here]()
