@@ -2,9 +2,6 @@
 # snapshots land, none of which belong in a repository.
 /target/
 
-# The built plugin, rewritten by every build.
-/dist/
-
 # Local cargo config and lock noise for a workspace of binaries+libs.
 # Cargo.lock IS checked in on purpose: this workspace produces binaries, and a
 # reproducible dependency set is worth having.
