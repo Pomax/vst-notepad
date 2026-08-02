@@ -157,7 +157,9 @@ Two workflows, because checking the code and shipping it are different jobs.
 the pixel tests, on both `windows-latest` and `macos-14`, plus a
 [zizmor](https://docs.zizmor.sh) audit of the workflows themselves.
 
-`.github/workflows/build.yml` runs on pushes to `main`. It builds and zips both
+`.github/workflows/build.yml` runs on pushes to `main` that change the code.
+Markdown, `docs/`, `.github/`, `LICENSE` and `.gitignore` are ignored, so
+editing the workflows does not cut a release. It builds and zips both
 platforms, then publishes them as a GitHub release. Releases are numbered by how
 many already exist — the first is `1`, the one after release `8` is `9`. There
 is no version number and no semver; this is a product, not a library.

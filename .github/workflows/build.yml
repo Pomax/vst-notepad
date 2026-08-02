@@ -3,6 +3,12 @@ name: Build
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".github/**"
+      - LICENSE
+      - .gitignore
   workflow_dispatch:
 
 permissions: {}

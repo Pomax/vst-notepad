@@ -37,7 +37,7 @@ Added during development:
 - **W5** — a document explaining how to use the VST host, and how to load the plugin — and really *any* VST3 plugin — in it.
 - **W6** — the GUI must be verifiable by looking at it, not by asserting around it. Write something that can see the rendered output.
 - **W7** — a manual build script for each platform: `build.bat` on Windows, `build.sh` on macOS.
-- **W8** — CI runs the full suite on every pull request, on both Windows and macOS. Pushes to main build both platforms and publish the zips as a release, numbered by release count — no version number, no semver.
+- **W8** — CI runs the full suite on every pull request, on both Windows and macOS. Pushes to main build both platforms and publish the zips as a release, numbered by release count — no version number, no semver. Documentation-only pushes do not build and do not release.
 
 ## Status
 
