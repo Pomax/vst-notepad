@@ -1,12 +1,11 @@
 # A vibe-coded VST3 Notepad effect
 
+You compose and produce: you have notes on your projects. You're probably keeping them in text files in some folder, maybe even managed using Obsidian or something. But let's be honest: why?
+
+Not the notes part, that part makes perfect sense, but why would your notes need to live separately from your actual project?
 ![light themed](./docs/images/notepad-light.png)
 
 ![dark themed](./docs/images/notepad-dark.png)
-
-You compose and produce: have notes on your projects. You're probably keeping them in text files in some folder, maybe even managed using Obsidian or something. But let's be honest: why?
-
-Not the notes part, that part makes perfect sense, but why would your notes need to live separately from your actual project?
 
 ## "My DAW doesn't let me s-"
 
