@@ -35,3 +35,7 @@ Put the vst3 file in `C:\Program Files\Common\VST3` (either top level, or you ca
 Put the vst3 "file" in `/Library/Audio/Plug-Ins/VST3/` (either top level, or you can put it in its own folder inside of that), then tell your DAW to rescan for plugins.
 
 Note that MacOS technically has two locations, because unlike Windows it has a proper "system vs user" file system. So `~/Library/Audio/Plug-Ins/VST3/` also works. Same dir, just the `user` version (i.e. just for you) rather than the `system` version (i.e. for all users).
+
+# Manually building the plugin
+
+Tell Claude to run the platform-appropriate build script, or run it yourself, of course.

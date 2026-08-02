@@ -3,7 +3,6 @@ name: Build
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions: {}
@@ -69,7 +68,6 @@ jobs:
   release:
     name: Publish release
     needs: [windows, macos]
-    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: write # uploads the release assets
@@ -79,8 +77,21 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Number this release
+        id: number
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          published=$(gh api --paginate 'repos/{owner}/{repo}/releases' --jq 'length' \
+            | awk '{ total += $1 } END { print total + 0 }')
+          echo "n=$((published + 1))" >> "$GITHUB_OUTPUT"
+
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
+          tag_name: ${{ steps.number.outputs.n }}
+          name: Release ${{ steps.number.outputs.n }}
           files: |
             artifacts/Notepad-windows-x86_64.zip
             artifacts/Notepad-macos-arm64.zip

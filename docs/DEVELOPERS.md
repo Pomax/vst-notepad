@@ -153,15 +153,14 @@ VST3 plugin is loaded.
 
 Two workflows, because checking the code and shipping it are different jobs.
 
-`.github/workflows/ci.yml` runs on pushes to `main` and pull requests targeting
-it: the full suite including the pixel tests, on both `windows-latest` and
-`macos-14`, plus a [zizmor](https://docs.zizmor.sh) audit of the workflows
-themselves.
+`.github/workflows/ci.yml` runs on every pull request: the full suite including
+the pixel tests, on both `windows-latest` and `macos-14`, plus a
+[zizmor](https://docs.zizmor.sh) audit of the workflows themselves.
 
-`.github/workflows/build.yml` runs on `v*` tags. It calls `ci.yml` as a
-reusable workflow first, then builds and zips both platforms and attaches them
-to the GitHub release — so a release cannot publish unless the tests passed in
-the same run.
+`.github/workflows/build.yml` runs on pushes to `main`. It builds and zips both
+platforms, then publishes them as a GitHub release. Releases are numbered by how
+many already exist — the first is `1`, the one after release `8` is `9`. There
+is no version number and no semver; this is a product, not a library.
 
 ## Keys
 
