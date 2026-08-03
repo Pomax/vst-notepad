@@ -24,7 +24,7 @@ Oh look: it did the thing.
 
 # Installing the plugin
 
-## Downloads are [here]()
+## Downloads are [here](https://github.com/Pomax/vst-notepad/releases)
 
 As this is a VST3 release, there's only Windows and a MacOS releases, because Linux does not support VST3. If you're on Linux, have a look at https://github.com/robbert-vdh/yabridge, which might work for you.
 
