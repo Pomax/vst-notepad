@@ -172,6 +172,11 @@ fn bundle(args: &[String]) -> Result<PathBuf, String> {
     let dist = write_dist(&root, &lib, &bundle_root, &triple)?;
     println!("dist:   {}", dist.display());
 
+    // 4b. Sign it, or macOS will call it damaged.
+    if is_macos(&triple) {
+        sign_bundle(&dist)?;
+    }
+
     // 5. Load what is about to ship, the way a host will.
     if runnable_here(&triple) {
         verify_bundle(&dist)?;
@@ -184,6 +189,59 @@ fn bundle(args: &[String]) -> Result<PathBuf, String> {
     remove_target(&root);
 
     Ok(bundle_root)
+}
+
+/// Ad-hoc sign the finished macOS bundle.
+///
+/// The linker already signs the dylib — arm64 code will not load at all
+/// unsigned — but that signature covers a lone Mach-O file. Once the same
+/// binary sits in `Contents/MacOS/`, macOS judges the *bundle*, and a bundle is
+/// expected to carry `Contents/_CodeSignature/CodeResources` sealing its
+/// `Info.plist` and `Resources/`. Without it `codesign --verify` says "code has
+/// no resources but signature indicates they must be present": the bundle is
+/// not merely unnotarised, it is *invalid*.
+///
+/// That distinction is the whole bug. Invalid is the one verdict with no way
+/// past it — the plugin is reported as damaged and the only offered action is
+/// the Trash, and no "Open Anyway" button ever appears in Privacy & Security,
+/// because that button is for code that is validly signed by a developer macOS
+/// does not know. Signing here puts the bundle back in that second category.
+///
+/// `-` is the ad-hoc identity: no certificate, no Apple Developer account, no
+/// notarisation. A download still arrives quarantined and the README says how
+/// to clear that, but the plugin now fails the way unsigned software is meant
+/// to fail, with a route around it, rather than being declared broken.
+fn sign_bundle(bundle: &Path) -> Result<(), String> {
+    if !cfg!(target_os = "macos") {
+        println!(
+            "note:   not on macOS, so {} goes out unsigned and will be \
+             refused as damaged",
+            bundle.display()
+        );
+        return Ok(());
+    }
+
+    let codesign = |args: &[&str]| -> Result<(), String> {
+        let output = Command::new("codesign")
+            .args(args)
+            .arg(bundle)
+            .output()
+            .map_err(|e| format!("running codesign: {e}"))?;
+        if output.status.success() {
+            return Ok(());
+        }
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    };
+
+    codesign(&["--force", "--sign", "-"])
+        .map_err(|e| format!("signing {}: {e}", bundle.display()))?;
+    // Signing something codesign will not then accept is worse than not
+    // signing it, because it fails on the user's machine instead of this one.
+    codesign(&["--verify", "--strict", "--deep"])
+        .map_err(|e| format!("{} does not verify after signing: {e}", bundle.display()))?;
+
+    println!("signed: {} (ad-hoc)", bundle.display());
+    Ok(())
 }
 
 /// Whether a bundle built for `triple` can be loaded by this process.
