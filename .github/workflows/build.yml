@@ -98,6 +98,31 @@ jobs:
         with:
           tag_name: ${{ steps.number.outputs.n }}
           name: Release ${{ steps.number.outputs.n }}
+          # The macOS note belongs on the release page rather than only in the
+          # README: the dialog appears at install time, which is exactly when
+          # nobody is reading the repository.
+          body: |
+            Drop the `.vst3` in your VST3 directory and rescan:
+
+            - **Windows** — `C:\Program Files\Common\VST3`
+            - **macOS** — `~/Library/Audio/Plug-Ins/VST3/`
+
+            ### macOS: "Apple could not verify Notepad.vst3 is free of malware"
+
+            Expected, and not a sign of a bad download. The plugin is
+            code-signed but not *notarised*, because notarisation requires a
+            paid Apple Developer account and this plugin is free. macOS flags
+            anything downloaded from the internet and refuses to load
+            un-notarised code that carries that flag.
+
+            Clear the flag on your installed copy and the dialog is gone for
+            good:
+
+            ```
+            xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Notepad.vst3
+            ```
+
+            This affects that one file. It does not turn off Gatekeeper.
           files: |
             artifacts/Notepad-windows-x86_64.zip
             artifacts/Notepad-macos-arm64.zip

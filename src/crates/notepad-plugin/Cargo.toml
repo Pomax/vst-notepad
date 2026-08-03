@@ -31,6 +31,12 @@ egui_kittest = { version = "0.35.0", features = ["wgpu"], optional = true }
 image = { version = "0.25.10", optional = true }
 font-kit = "0.14.3"
 
+# The cursor has to be set directly on macOS: baseview registers it with
+# `addCursorRect:cursor:` from outside `resetCursorRects`, so AppKit discards it
+# and the pointer reverts to an arrow. See gui::apply_cursor.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = "0.3"
+
 [features]
 # Enables the headless renderer:
 #   cargo test -p notepad-plugin --features snapshots

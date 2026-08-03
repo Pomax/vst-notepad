@@ -360,5 +360,45 @@ pub fn all() -> Vec<Scenario> {
                 ExpectSource("hell"),
             ],
         ),
+        // ------------------------------------------------ keyboard ownership
+        scenario(
+            "typing a sentence never hands a keystroke back to the DAW",
+            vec![
+                ExpectTypingStaysInEditor("Mix notes: cut the low end"),
+                ExpectSource("Mix notes: cut the low end"),
+            ],
+        ),
+        scenario(
+            "the space bar is kept by the editor rather than starting playback",
+            vec![
+                // Space is the keystroke that exposes this: it is play/stop in
+                // every DAW, so an unclaimed one starts the transport in the
+                // middle of a sentence.
+                Type("bar"),
+                ExpectKeyStaysInEditor(Key::Char(' '), Mods::NONE),
+                ExpectSource("bar "),
+            ],
+        ),
+        scenario(
+            "editing and movement keys are kept, not offered as shortcuts",
+            vec![
+                Type("hello"),
+                ExpectKeyStaysInEditor(Key::Backspace, Mods::NONE),
+                ExpectKeyStaysInEditor(Key::Left, Mods::NONE),
+                ExpectKeyStaysInEditor(Key::Home, Mods::NONE),
+                ExpectKeyStaysInEditor(Key::End, Mods::NONE),
+                ExpectKeyStaysInEditor(Key::Enter, Mods::NONE),
+                // Two newlines, not one: a new paragraph in markdown needs the
+                // blank line, so Enter on a paragraph writes the separator.
+                ExpectSource("hell\n\n"),
+            ],
+        ),
+        scenario(
+            "markdown punctuation is kept, however host-shortcut-like it looks",
+            vec![
+                ExpectTypingStaysInEditor("# [x] *bold* `code` > quote"),
+                ExpectSource("# [x] *bold* `code` > quote"),
+            ],
+        ),
     ]
 }

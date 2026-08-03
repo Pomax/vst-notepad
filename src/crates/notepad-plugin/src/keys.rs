@@ -91,6 +91,26 @@ pub fn decode_key(key_char: u16, key_code: i16) -> Option<Key> {
     Some(Key::Char(c))
 }
 
+/// Whether a key event must be reported to the host as consumed.
+///
+/// `IPlugView::onKeyDown` returning `kResultFalse` does not mean "no comment",
+/// it means "this keystroke went unused" — and a host is then entitled to run
+/// its own shortcut for it. Getting this wrong is not a subtle bug: the
+/// character is inserted into the document *and* the DAW acts on it, so typing
+/// a space starts playback and typing letters fires tool shortcuts.
+///
+/// * With the editor window open, every key is claimed. The window has already
+///   delivered it natively, and a key this editor happens to ignore is still
+///   not the DAW's to act on while the notepad holds focus.
+/// * With no window there is no editor to hold focus, and this is the only
+///   input path, so the answer is simply whether the key did something.
+pub fn claims_key(window_open: bool, decoded: Option<Key>, handled: bool) -> bool {
+    if window_open {
+        return true;
+    }
+    decoded.is_some() && handled
+}
+
 /// Encode a character the way a host would deliver it — used by the test host.
 pub fn encode_char(c: char) -> (u16, i16) {
     let mut buf = [0u16; 2];
@@ -146,6 +166,43 @@ mod tests {
         assert!(decode_mods(MOD_ALT).alt);
         let both = decode_mods(MOD_COMMAND | MOD_SHIFT);
         assert!(both.ctrl && both.shift && !both.alt);
+    }
+
+    #[test]
+    fn an_open_editor_claims_every_key_so_nothing_reaches_the_daw() {
+        // The point of the fix: not merely the keys the editor understands.
+        // Anything left unclaimed is offered to the host as an unused key.
+        assert!(claims_key(true, Some(Key::Char('a')), true));
+        assert!(claims_key(true, Some(Key::Char(' ')), true));
+        assert!(claims_key(true, Some(Key::Escape), false));
+        assert!(claims_key(true, None, false));
+    }
+
+    #[test]
+    fn a_space_typed_into_an_open_editor_is_never_offered_to_the_host() {
+        // Space is the one that gives the bug away: in every DAW it is
+        // play/stop, so an unclaimed space starts the transport mid-sentence.
+        let (unit, code) = encode_char(' ');
+        let decoded = decode_key(unit, code);
+        assert_eq!(decoded, Some(Key::Char(' ')));
+        assert!(claims_key(true, decoded, true));
+        assert!(claims_key(true, decoded, false));
+    }
+
+    #[test]
+    fn with_no_window_only_keys_the_editor_used_are_claimed() {
+        // Nothing has focus, so an unused key belongs to the host.
+        assert!(claims_key(false, Some(Key::Char('a')), true));
+        assert!(!claims_key(false, Some(Key::Char('a')), false));
+        assert!(!claims_key(false, None, false));
+    }
+
+    #[test]
+    fn an_unrecognised_key_is_never_claimed_without_a_window() {
+        // Function keys and the like decode to nothing and must stay the
+        // host's, or the plugin would swallow shortcuts it has no use for.
+        assert_eq!(decode_key(0, 9999), None);
+        assert!(!claims_key(false, decode_key(0, 9999), true));
     }
 
     #[test]

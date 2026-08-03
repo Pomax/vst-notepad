@@ -60,6 +60,16 @@ pub enum Step {
     /// to be subtly broken in a host: the plugin says yes to mono and then
     /// claims two channels.
     ExpectMonoIsHonoured,
+    /// Press a key and require the plugin to report it as consumed.
+    ///
+    /// `onKeyDown` returning `kResultFalse` tells the host the keystroke went
+    /// unused, and the host is then free to treat it as one of its own
+    /// shortcuts — so the character lands in the document *and* the DAW acts on
+    /// it. Typing a space starts playback; typing letters fires tool shortcuts.
+    /// This asserts the answer the host is given, not the effect on the text.
+    ExpectKeyStaysInEditor(Key, Mods),
+    /// The same, for every character of a string.
+    ExpectTypingStaysInEditor(&'static str),
     /// Push a block of audio through and require it to come out untouched.
     ///
     /// A notepad has no business altering audio, but it is sitting in an insert
@@ -134,6 +144,29 @@ pub fn run(module: &Module, scenario: &Scenario) -> Result<(), Failure> {
             }
             Step::Press(key, mods) => {
                 plugin.send_key(*key, *mods).map_err(|e| err(e.to_string()))?;
+            }
+            Step::ExpectKeyStaysInEditor(key, mods) => {
+                let kept = plugin.send_key(*key, *mods).map_err(|e| err(e.to_string()))?;
+                if !kept {
+                    return Err(err(format!(
+                        "{key:?} was reported to the host as unused, so the DAW is \
+                         free to act on it as a shortcut"
+                    )));
+                }
+            }
+            Step::ExpectTypingStaysInEditor(text) => {
+                for c in text.chars() {
+                    let key = if c == '\n' { Key::Enter } else { Key::Char(c) };
+                    let kept = plugin
+                        .send_key(key, Mods::NONE)
+                        .map_err(|e| err(e.to_string()))?;
+                    if !kept {
+                        return Err(err(format!(
+                            "typing {c:?} was reported to the host as unused, so the \
+                             DAW is free to act on it as a shortcut"
+                        )));
+                    }
+                }
             }
             Step::ExpectSource(want) => {
                 let (_, editor) = snapshot(&plugin).map_err(|e| err(e.to_string()))?;

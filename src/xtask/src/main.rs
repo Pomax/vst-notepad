@@ -244,6 +244,24 @@ fn sign_bundle(bundle: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// The module entry points a host resolves by name, for the platform being
+/// built.
+///
+/// The VST3 SDK spells the macOS pair with a lower-case initial letter and the
+/// Windows and Linux pairs with an upper-case one. That inconsistency is the
+/// SDK's, not a typo here, and it has already cost one release: `BundleEntry`
+/// exports a symbol no host asks for, and `dlsym` is case-sensitive, so the
+/// bundle loaded, reported its factory, and was refused anyway.
+fn entry_points() -> [&'static [u8]; 2] {
+    if cfg!(target_os = "macos") {
+        [b"bundleEntry\0", b"bundleExit\0"]
+    } else if cfg!(target_os = "windows") {
+        [b"InitDll\0", b"ExitDll\0"]
+    } else {
+        [b"ModuleEntry\0", b"ModuleExit\0"]
+    }
+}
+
 /// Whether a bundle built for `triple` can be loaded by this process.
 fn runnable_here(triple: &str) -> bool {
     let os = if is_macos(triple) {
@@ -274,6 +292,27 @@ fn runnable_here(triple: &str) -> bool {
 fn verify_bundle(bundle: &Path) -> Result<(), String> {
     let module = notepad_host::Module::load(bundle)
         .map_err(|e| format!("{} does not load: {e}", bundle.display()))?;
+
+    // Loading the module proves `GetPluginFactory` is there, because that is
+    // the symbol this host resolves. A real host resolves two more first, and
+    // refuses the plugin if either is missing — so checking the factory alone
+    // is not the same as checking the plugin loads.
+    for symbol in entry_points() {
+        let name = String::from_utf8_lossy(&symbol[..symbol.len() - 1]).into_owned();
+        unsafe {
+            module
+                .library()
+                .get::<*mut std::ffi::c_void>(symbol)
+                .map_err(|_| {
+                    format!(
+                        "{}: the entry point `{name}` is missing, so a host will \
+                         load this bundle and then reject it",
+                        bundle.display()
+                    )
+                })?;
+        }
+        println!("entry:  {name}");
+    }
 
     let count = module.class_count();
     if count == 0 {

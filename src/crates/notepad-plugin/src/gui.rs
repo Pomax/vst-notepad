@@ -186,7 +186,34 @@ fn draw(ui: &mut egui::Ui, gui: &mut Gui, commands: &mut ExtraOutputCommands) {
     // Also hand the background to the renderer, which clears to it before any
     // of our painting happens.
     commands.clear_color(egui::Rgba::from(background));
+    apply_cursor(ui.ctx());
 }
+
+/// Apply the cursor egui asked for, directly.
+///
+/// egui only *reports* a cursor icon; something has to put it on the window.
+/// baseview does that with `addCursorRect:cursor:`, which AppKit only honours
+/// from inside `resetCursorRects` — anywhere else the rect is discarded the
+/// next time the window rebuilds its cursor rects, which is constantly. The
+/// pointer therefore snaps straight back to an arrow, and egui-baseview never
+/// re-applies it because it only calls down when the icon *changes*.
+///
+/// Setting `NSCursor` every frame is what makes the choice stick. It is the
+/// last word on the cursor, so it has to follow egui's decision rather than
+/// hard-coding one, or the toolbar would get an I-beam too.
+#[cfg(target_os = "macos")]
+fn apply_cursor(ctx: &egui::Context) {
+    use objc2_app_kit::NSCursor;
+
+    let cursor = match ctx.output(|out| out.cursor_icon) {
+        egui::CursorIcon::Text => NSCursor::IBeamCursor(),
+        _ => NSCursor::arrowCursor(),
+    };
+    cursor.set();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn apply_cursor(_ctx: &egui::Context) {}
 
 /// Draw one frame and return the background colour the theme calls for.
 ///
@@ -469,6 +496,16 @@ fn document(ui: &mut egui::Ui, gui: &mut Gui) {
     let mut clicked: Option<usize> = None;
     let mut toggled: Option<usize> = None;
 
+    // Registered before any line, so every line and control sits on top of it
+    // and keeps its own clicks. This only catches what falls between them: the
+    // gaps separating lines, and the empty space below the last one.
+    let focus = ui.id().with("document-background");
+    let background = ui
+        .interact(ui.available_rect_before_wrap(), focus, Sense::click())
+        .on_hover_cursor(egui::CursorIcon::Text);
+    hold_keyboard_focus(ui, focus, &background);
+
+    let mut lines: Vec<LineHit> = Vec::new();
     let em = egui::TextStyle::Body.resolve(ui.style()).size;
     let mut previous: Option<&Block> = None;
 
@@ -517,10 +554,19 @@ fn document(ui: &mut egui::Ui, gui: &mut Gui) {
                 }
             }
 
-            if let Some(offset) = line_body(ui, block, &src, caret, raw) {
+            let hit = line_body(ui, block, &src, caret, raw);
+            if let Some(offset) = hit.clicked {
                 clicked = Some(offset);
             }
+            lines.push(hit);
         });
+    }
+
+    // Nothing was hit directly, so fall back to whichever line is closest.
+    if clicked.is_none() && background.clicked() {
+        if let Some(pos) = background.interact_pointer_pos() {
+            clicked = nearest_offset(&lines, pos);
+        }
     }
 
     if let Some(line) = toggled {
@@ -528,6 +574,42 @@ fn document(ui: &mut egui::Ui, gui: &mut Gui) {
     } else if let Some(offset) = clicked {
         editor.set_caret(offset);
     }
+}
+
+/// Keep egui's keyboard focus on the document.
+///
+/// This is what stops keystrokes reaching the DAW, and it is not obvious.
+/// baseview hands a key to the window handler and, if the handler reports it
+/// unused, passes it to `super.keyDown:` — straight up the responder chain into
+/// the host, which runs its own shortcut. egui-baseview reports a key as used
+/// only when `egui_wants_keyboard_input()` is true, and that is true only when
+/// some egui widget holds focus.
+///
+/// Nothing here is a `TextEdit`: the document is painted directly and keys are
+/// read from the raw event stream, so without this no widget is ever focused,
+/// every keystroke is reported unused, and typing in the notepad also drives
+/// the DAW. Holding focus on the document is what makes the editor look like a
+/// focused text field to that check.
+///
+/// The lock filter is the second half. A focused widget normally gives Tab and
+/// the arrow keys back to egui for focus navigation, which would send Tab to
+/// the toolbar instead of indenting a list item. Claiming them here keeps them
+/// with the document, exactly as `TextEdit` does.
+fn hold_keyboard_focus(ui: &mut egui::Ui, id: egui::Id, background: &egui::Response) {
+    if background.clicked() || ui.memory(|memory| memory.focused().is_none()) {
+        ui.memory_mut(|memory| memory.request_focus(id));
+    }
+    ui.memory_mut(|memory| {
+        memory.set_focus_lock_filter(
+            id,
+            egui::EventFilter {
+                tab: true,
+                horizontal_arrows: true,
+                vertical_arrows: true,
+                escape: true,
+            },
+        )
+    });
 }
 
 /// Vertical space to leave between two consecutive lines.
@@ -560,6 +642,30 @@ fn block_gap(previous: &Block, current: &Block, em: f32) -> f32 {
     }
 }
 
+/// One drawn line, kept so a click that missed every line can still be mapped
+/// onto the nearest one.
+struct LineHit {
+    rect: egui::Rect,
+    galley: Arc<egui::Galley>,
+    /// Source byte offset for each char position in the galley.
+    map: Vec<usize>,
+    /// Set when this line itself was clicked.
+    clicked: Option<usize>,
+}
+
+impl LineHit {
+    /// Source offset for a point, in screen coordinates.
+    ///
+    /// The point does not have to be inside the line: `cursor_from_pos` clamps
+    /// to the nearest position, which is what puts the caret at the end of the
+    /// line when the click was past the last character.
+    fn offset_at(&self, pos: egui::Pos2) -> Option<usize> {
+        let cursor = self.galley.cursor_from_pos(pos - self.rect.min);
+        let index = cursor.index.0.min(self.map.len().saturating_sub(1));
+        self.map.get(index).copied()
+    }
+}
+
 /// Draw one line's text, its caret, and report a click position.
 fn line_body(
     ui: &mut egui::Ui,
@@ -567,7 +673,7 @@ fn line_body(
     src: &str,
     caret: usize,
     raw: bool,
-) -> Option<usize> {
+) -> LineHit {
     let base = base_format(block);
     let palette = Palette::from(ui.visuals());
 
@@ -609,7 +715,15 @@ fn line_body(
     map.push(block.range.end);
 
     let galley = ui.painter().layout_job(job);
-    let (rect, response) = ui.allocate_exact_size(galley.size(), Sense::click());
+
+    // The click target runs to the edge of the window rather than stopping at
+    // the last character. Clicking to the right of a line is how everyone ends
+    // a line in a text editor, and a rect the exact width of the glyphs makes
+    // that a no-op. The text is still painted at the left edge of the rect.
+    let width = ui.available_width().max(galley.size().x);
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(width, galley.size().y), Sense::click());
+    let response = response.on_hover_cursor(egui::CursorIcon::Text);
     ui.painter()
         .galley(rect.min, Arc::clone(&galley), ui.visuals().text_color());
 
@@ -638,13 +752,35 @@ fn line_body(
 
     let _ = raw;
 
+    let mut hit = LineHit {
+        rect,
+        galley,
+        map,
+        clicked: None,
+    };
     if response.clicked() {
-        let pos = response.interact_pointer_pos()?;
-        let cursor = galley.cursor_from_pos(pos - rect.min);
-        let index = cursor.index.0.min(map.len().saturating_sub(1));
-        return map.get(index).copied();
+        if let Some(pos) = response.interact_pointer_pos() {
+            hit.clicked = hit.offset_at(pos);
+        }
     }
-    None
+    hit
+}
+
+/// Map a click that landed on no line at all onto the nearest one.
+///
+/// Lines are separated by real gaps, and the document ends well above the
+/// bottom of the window, so a good part of the editor is not covered by any
+/// line's rect. Clicking there should still move the caret — below the last
+/// line means the end of the document, exactly as it does anywhere else.
+fn nearest_offset(lines: &[LineHit], pos: egui::Pos2) -> Option<usize> {
+    lines
+        .iter()
+        .min_by(|a, b| {
+            a.rect
+                .distance_sq_to_pos(pos)
+                .total_cmp(&b.rect.distance_sq_to_pos(pos))
+        })?
+        .offset_at(pos)
 }
 
 /// Append `text` to the job, recording the source offset of every byte.
@@ -838,3 +974,102 @@ fn translate_key(key: egui::Key, ctrl: bool) -> Option<Key> {
     Some(k)
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use notepad_core::Editor;
+    use std::sync::Mutex;
+
+    /// The real GUI, driven headlessly.
+    ///
+    /// A plain `egui::Context` is enough — these assert on state, not pixels,
+    /// so none of the rasteriser the snapshot tests need is involved.
+    struct Headless {
+        ctx: egui::Context,
+        state: TestGui,
+    }
+
+    impl Headless {
+        fn new() -> Headless {
+            let editor: Shared = Arc::new(Mutex::new(Editor::with_text("# Notes\n\nsome text")));
+            Headless {
+                ctx: egui::Context::default(),
+                state: TestGui::new(editor, false),
+            }
+        }
+
+        fn frame(&mut self, events: Vec<egui::Event>) {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::pos2(0.0, 0.0),
+                    egui::vec2(700.0, 400.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            let Headless { ctx, state } = self;
+            let _ = ctx.run_ui(input, |ui| draw_frame_for_test(ui, state));
+        }
+
+        fn settle(&mut self) {
+            for _ in 0..3 {
+                self.frame(Vec::new());
+            }
+        }
+
+        fn focused(&self) -> Option<egui::Id> {
+            self.ctx.memory(|memory| memory.focused())
+        }
+    }
+
+    fn press(key: egui::Key) -> egui::Event {
+        egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    #[test]
+    fn the_document_holds_keyboard_focus_so_keys_never_reach_the_host() {
+        let mut gui = Headless::new();
+        gui.settle();
+        // egui-baseview reports a key as used only when this is true, and
+        // baseview hands anything reported unused to `super.keyDown:`, which
+        // walks the responder chain into the DAW. This one boolean is the
+        // whole difference between typing in the notepad and playing the set.
+        assert!(
+            gui.ctx.egui_wants_keyboard_input(),
+            "nothing holds egui focus, so every keystroke would be passed to the host"
+        );
+    }
+
+    #[test]
+    fn tab_and_arrows_stay_with_the_document_instead_of_moving_focus() {
+        let mut gui = Headless::new();
+        gui.settle();
+        let before = gui.focused().expect("the document should hold focus");
+
+        // Without the lock filter egui treats these as focus navigation, so Tab
+        // would move focus to the toolbar rather than indenting a list item —
+        // and once focus left, keystrokes would start reaching the host again.
+        for key in [
+            egui::Key::Tab,
+            egui::Key::ArrowLeft,
+            egui::Key::ArrowRight,
+            egui::Key::ArrowUp,
+            egui::Key::ArrowDown,
+        ] {
+            gui.frame(vec![press(key)]);
+            assert_eq!(
+                gui.focused(),
+                Some(before),
+                "{key:?} moved focus away from the document"
+            );
+            assert!(gui.ctx.egui_wants_keyboard_input(), "{key:?} lost focus");
+        }
+    }
+}

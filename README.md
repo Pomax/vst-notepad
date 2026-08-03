@@ -42,6 +42,22 @@ Put the vst3 "file" in `/Library/Audio/Plug-Ins/VST3/` (either top level, or you
 
 Note that MacOS technically has two locations, because unlike Windows it has a proper "system vs user" file system. So `~/Library/Audio/Plug-Ins/VST3/` also works. Same dir, just the `user` version (i.e. just for you) rather than the `system` version (i.e. for all users).
 
+#### "Apple could not verify Notepad.vst3 is free of malware"
+
+You will get this, and it is not a sign that anything is wrong with the download.
+
+The plugin is code-signed, but it is not *notarised*: notarisation means uploading every build to Apple for scanning, which requires a paid Apple Developer account. This is a free plugin, so it doesn't have one. Anything you download from the internet gets flagged with a `com.apple.quarantine` attribute, and for un-notarised code MacOS refuses to load it and offers you the Trash.
+
+Clear the flag on the copy you installed and the dialog goes away for good:
+
+```bash
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Notepad.vst3
+```
+
+Use `/Library/Audio/Plug-Ins/VST3/` instead if you installed it system-wide (and put `sudo` in front, since that directory isn't yours). Then tell your DAW to rescan.
+
+That command removes the "this came from the internet" mark. It does not disable Gatekeeper or change any system setting — it applies to that one file, and only because you're the one deciding to trust it.
+
 # Manually building the plugin
 
 Tell Claude to run the platform-appropriate build script, or run it yourself, of course.

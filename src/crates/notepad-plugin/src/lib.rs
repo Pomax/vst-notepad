@@ -43,7 +43,7 @@ use vst3::{uid, Class, ComRef, ComWrapper, Steinberg::Vst::*, Steinberg::*};
 pub type Shared = Arc<Mutex<Editor>>;
 
 const PLUGIN_NAME: &str = "Notepad";
-const VENDOR: &str = "vst-notepad";
+const VENDOR: &str = "Pomax (using Claude)";
 const VERSION: &str = "0.1.0";
 const SDK_VERSION: &str = "VST 3.7.0";
 /// This is an effect, not an instrument. It must be reported identically from
@@ -670,34 +670,59 @@ impl IPlugViewTrait for NotepadView {
     /// handling them here as well would insert every character twice. Without a
     /// window — which is how the test host drives the plugin, and how a host
     /// that never opens the editor behaves — this is the only input path.
+    ///
+    /// The return value is not a formality. `kResultFalse` means "this keystroke
+    /// went unused", and a host is entitled to act on that by running its own
+    /// shortcut for the key. Reporting it for a key the editor just consumed is
+    /// what makes typing into the notepad also trigger transport and hotkeys in
+    /// the DAW: the character is inserted *and* the host acts on it. So a key
+    /// the editor owns is claimed either way, whether it was handled here or
+    /// natively by the window.
     unsafe fn onKeyDown(&self, key: char16, keyCode: int16, modifiers: int16) -> tresult {
-        if self.has_window() {
-            return kResultFalse;
-        }
-        let Some(k) = keys::decode_key(key as u16, keyCode) else {
-            return kResultFalse;
+        let window_open = self.has_window();
+        let decoded = keys::decode_key(key as u16, keyCode);
+
+        // With a window the key has already been delivered natively, so it is
+        // only decoded here, never applied — applying it again would type
+        // every character twice.
+        let handled = match decoded {
+            Some(k) if !window_open => {
+                let mods = keys::decode_mods(modifiers);
+                let result = {
+                    let Ok(mut editor) = self.editor.lock() else {
+                        return kInternalError;
+                    };
+                    editor.handle_key(k, mods)
+                };
+                // Open/Save/Save As need the host and a file dialog, so they
+                // run once the document lock has been dropped.
+                if let Some(command) = result.command {
+                    self.perform(command);
+                }
+                result.handled
+            }
+            _ => false,
         };
-        let mods = keys::decode_mods(modifiers);
-        let result = {
-            let Ok(mut editor) = self.editor.lock() else {
-                return kInternalError;
-            };
-            editor.handle_key(k, mods)
-        };
-        // Open/Save/Save As need the host and a file dialog, so they run once
-        // the document lock has been dropped.
-        if let Some(command) = result.command {
-            self.perform(command);
-        }
-        if result.handled {
+
+        if keys::claims_key(window_open, decoded, handled) {
             kResultTrue
         } else {
             kResultFalse
         }
     }
 
-    unsafe fn onKeyUp(&self, _key: char16, _keyCode: int16, _modifiers: int16) -> tresult {
-        kResultFalse
+    /// Nothing to do on release, but a key claimed on the way down has to be
+    /// claimed on the way up too — a host that acts on key-up would otherwise
+    /// fire the shortcut anyway, one event later.
+    unsafe fn onKeyUp(&self, key: char16, keyCode: int16, _modifiers: int16) -> tresult {
+        let decoded = keys::decode_key(key as u16, keyCode);
+        // A release is never "used" as such, so the press is what decides:
+        // anything the editor would take on the way down is claimed here too.
+        if keys::claims_key(self.has_window(), decoded, decoded.is_some()) {
+            kResultTrue
+        } else {
+            kResultFalse
+        }
     }
 
     unsafe fn getSize(&self, size: *mut ViewRect) -> tresult {
@@ -822,8 +847,8 @@ impl IPluginFactoryTrait for Factory {
     unsafe fn getFactoryInfo(&self, info: *mut PFactoryInfo) -> tresult {
         let info = &mut *info;
         copy_cstring(VENDOR, &mut info.vendor);
-        copy_cstring("https://example.invalid/vst-notepad", &mut info.url);
-        copy_cstring("noreply@example.invalid", &mut info.email);
+        copy_cstring("https://github.com/Pomax/vst-notepad", &mut info.url);
+        copy_cstring("pomax@nihongoresources.com", &mut info.email);
         info.flags = PFactoryInfo_::FactoryFlags_::kUnicode as int32;
         kResultOk
     }
@@ -925,15 +950,20 @@ extern "system" fn ExitDll() -> bool {
     true
 }
 
+// Lower-case initial letter, unlike every other platform's pair. That is not a
+// typo: the VST3 SDK spells these `bundleEntry`/`bundleExit` in macmain.cpp
+// while spelling the Windows and Linux ones `InitDll` and `ModuleEntry`. dlsym
+// is case-sensitive, so `BundleEntry` exports a symbol no host ever asks for —
+// the bundle loads, the factory is present, and the host still rejects it.
 #[cfg(target_os = "macos")]
 #[no_mangle]
-extern "system" fn BundleEntry(_bundle_ref: *mut c_void) -> bool {
+extern "system" fn bundleEntry(_bundle_ref: *mut c_void) -> bool {
     true
 }
 
 #[cfg(target_os = "macos")]
 #[no_mangle]
-extern "system" fn BundleExit() -> bool {
+extern "system" fn bundleExit() -> bool {
     true
 }
 
